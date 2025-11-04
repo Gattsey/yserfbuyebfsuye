@@ -105,14 +105,17 @@ tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(CallbackQueryHandler(button_click))
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     try:
+        if not tg_app._initialized:
+            await tg_app.initialize()
+        if not tg_app._running:
+            await tg_app.start()
         update = Update.de_json(request.get_json(force=True), tg_app.bot)
-        asyncio.run(tg_app.process_update(update))
+        await tg_app.process_update(update)
     except Exception as e:
         print("Error processing update:", e)
     return "OK", 200
-
 
 # =========================================================
 #  Webhook setup
@@ -126,6 +129,7 @@ set_webhook()
 application = app
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
+    asyncio.run(tg_app.initialize())
+    asyncio.run(tg_app.start())
+    set_webhook()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
