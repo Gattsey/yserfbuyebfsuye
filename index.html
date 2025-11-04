@@ -1,72 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Watch Ad Completely</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watch the Ad</title>
 <style>
-  body {
-    background: #000;
-    margin: 0;
-    font-family: Arial, sans-serif;
-    color: white;
-    text-align: center;
-  }
-  h2 {
-    font-weight: bold;
-    margin: 10px 0;
-  }
-  video {
-    width: 100%;
-    height: auto;
-    max-height: 75vh;
-    object-fit: contain;
-    background: black;
-  }
-  #continue-btn {
-    display: none;
-    background-color: #00aaff;
-    border: none;
-    color: white;
-    padding: 12px 25px;
-    font-size: 16px;
-    border-radius: 10px;
-    margin-top: 15px;
-    cursor: pointer;
-  }
+    body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+    }
+    video {
+        width: 100%;
+        height: auto;
+        max-height: 80vh;
+        object-fit: contain;
+        background: #000;
+    }
+    button {
+        background-color: #1c9eff;
+        border: none;
+        color: white;
+        padding: 14px 40px;
+        font-size: 18px;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 20px;
+    }
+    button:disabled {
+        background-color: #555;
+    }
 </style>
 </head>
 <body>
-  <h2>🎬 Watch the Ad Completely</h2>
-  <video id="adVideo" autoplay playsinline disablePictureInPicture controlslist="nodownload nofullscreen noplaybackrate">
+
+<h3>🎥 Watch the Ad Completely</h3>
+<video id="adVideo" autoplay playsinline muted oncontextmenu="return false;" controlslist="nodownload nofullscreen noremoteplayback">
     <source src="{{ video_link }}" type="video/mp4">
-    Your browser does not support video playback.
-  </video>
-  <button id="continue-btn">Continue</button>
+</video>
 
-  <script>
-    const video = document.getElementById('adVideo');
-    const continueBtn = document.getElementById('continue-btn');
+<button id="continueBtn" disabled>Continue</button>
 
-    // Disable seeking and pausing
-    video.addEventListener('timeupdate', () => {
-      if (video.currentTime < video.duration) {
-        video.controls = false;
-      }
-    });
-    video.addEventListener('pause', () => {
-      if (video.currentTime < video.duration) video.play();
-    });
+<script>
+const video = document.getElementById("adVideo");
+const btn = document.getElementById("continueBtn");
+let reward = {{ reward }};
+let user_id = {{ user_id }};
 
-    // Show Continue button only after video ends
-    video.addEventListener('ended', () => {
-      continueBtn.style.display = 'inline-block';
-    });
+// Disable pause/seek
+video.addEventListener('pause', () => video.play());
+video.addEventListener('seeking', () => video.currentTime = 0);
 
-    // When user clicks Continue, close web app and redirect
-    continueBtn.addEventListener('click', () => {
-      window.location.href = "{{ redirect_link }}";
+// Enable button after ad finishes
+video.addEventListener('ended', () => {
+    btn.disabled = false;
+});
+
+btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = "Please wait...";
+    await fetch("/watched", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({user_id: user_id, reward: reward})
     });
-  </script>
+    btn.textContent = "✅ Completed!";
+    setTimeout(() => window.close(), 1500);
+});
+</script>
+
 </body>
 </html>
