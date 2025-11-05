@@ -1,4 +1,4 @@
-# bot.py — Telegram Mini App with MP4 Ads + Auto Reward + Group Bonus
+# bot.py — Telegram Mini App with MP4 Ads + Auto Reward + Balance System
 import os
 import random
 import asyncio
@@ -29,19 +29,16 @@ nest_asyncio.apply()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DOMAIN = os.getenv("DOMAIN", "https://yserfbuyebfsuye.onrender.com")
 
-# Groups for bonus joining
 GROUPS = [
     {"name": "Loot Everything Fast", "url": "https://t.me/looteverythingfast"},
     {"name": "Loot Everything Fast 2", "url": "https://t.me/looteverythingfast2"}
 ]
 
-# Ads hosted externally (Cloudinary)
 AD_LINKS = [
     {"video_url": "https://res.cloudinary.com/dxatgmpv7/video/upload/v1762335977/ad1.mp4_pepcsc.mp4"},
     {"video_url": "https://res.cloudinary.com/dxatgmpv7/video/upload/v1762336514/ad2.mp4_dnuqew.mp4"}
 ]
 
-# File to track who got bonus messages
 USER_FILE = "users.json"
 if not os.path.exists(USER_FILE):
     with open(USER_FILE, "w") as f:
@@ -53,11 +50,7 @@ def load_users():
 
 def save_users(data):
     with open(USER_FILE, "w") as f:
-        json.dump(data, f)
-
-# Logging setup
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+        json.dump(data, f, indent=2)
 
 # ------------------------
 # 🌐 Flask App
@@ -70,39 +63,46 @@ def home():
 
 @app.route("/ad/<int:ad_id>")
 def ad_page(ad_id):
+    """Render video page for Mini App"""
     if 0 <= ad_id < len(AD_LINKS):
         ad = AD_LINKS[ad_id]
         with open("index.html", "r", encoding="utf-8") as f:
             html = f.read()
         return render_template_string(
-    html,
-    video_src=ad["video_url"],
-    domain=DOMAIN,
-    ad_id=ad_id,
-    user_id=request.args.get("user_id", ""),  # user ID passed from Telegram
-)
+            html,
+            video_src=ad["video_url"],
+            domain=DOMAIN,
+            ad_id=ad_id,
+            user_id=request.args.get("user_id", "")
+        )
     return "Invalid Ad ID", 404
 
 @app.route("/watched", methods=["POST"])
 def ad_watched():
-    """Called when user finishes watching ad"""
+    """Called when ad finishes watching"""
     data = request.get_json()
-    user_id = data.get("user_id")
-    
+    user_id = str(data.get("user_id"))
     if not user_id:
         return {"error": "Missing user_id"}, 400
 
-    import random
-    earnings = round(random.uniform(3, 5), 2)  # random ₹3.00 - ₹5.00
+    users = load_users()
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "joined_groups": False}
+
+    earnings = round(random.uniform(3, 5), 2)
+    users[user_id]["balance"] += earnings
+    save_users(users)
+
     msg1 = f"✅ Aapne ₹{earnings} kamaye! Ad dekhne ka dhanyavaad 🎉"
     msg2 = "💬 Kripya dono groups join karein aur Bonus section me claim karein!"
 
     try:
         asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg1))
-        asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg2))
+        if not users[user_id].get("joined_groups", False):
+            asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg2))
         return {"success": True}, 200
     except Exception as e:
-        logger.error(f"Error sending messages: {e}")
+        logging.error(f"Error sending messages: {e}")
         return {"error": str(e)}, 500
 
 # ------------------------
@@ -125,9 +125,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     users = load_users()
 
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "joined_groups": False}
+        save_users(users)
+
     if text == "▶️ Ad Dekho":
         ad_idx = random.randrange(len(AD_LINKS))
-        user_id = update.message.from_user.id
         ad_url = f"{DOMAIN}/ad/{ad_idx}?user_id={user_id}"
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
@@ -137,30 +140,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=kb
         )
 
-        # Send group join message only if user hasn't joined yet
-        if not users.get(user_id, {}).get("joined_groups"):
-            group_text = "📢 Bonus Alert:\nKripya in dono groups ko join karein aur apna ₹50 bonus claim karein:\n\n"
-            for g in GROUPS:
-                group_text += f"👉 [{g['name']}]({g['url']})\n"
-            group_text += "\n📍 Bonus section me claim karein!"
-            await update.message.reply_text(group_text, parse_mode="Markdown")
-            users[user_id] = {"joined_groups": False}
-            save_users(users)
+    elif text == "💵 Balance":
+        bal = users.get(user_id, {}).get("balance", 0)
+        btn = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("💰 Withdraw Funds", callback_data="withdraw")]]
+        )
+        await update.message.reply_text(f"💰 Available Balance: ₹{round(bal, 2)}", reply_markup=btn)
 
     elif text == "🎁 Bonus":
-        user_data = users.get(user_id, {})
-        if user_data.get("joined_groups"):
+        joined = users[user_id].get("joined_groups", False)
+        if joined:
             await update.message.reply_text("🎉 Aapka ₹50 bonus already claim ho chuka hai!")
         else:
             await update.message.reply_text("📢 Bonus claim karne ke liye dono groups join karein!")
 
-    elif text == "💵 Balance":
-        await update.message.reply_text("💰 Aapka current balance: ₹0.00 (demo).")
-
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
-        ref_link = f"https://t.me/{bot_username}?start={update.message.from_user.id}"
-        await update.message.reply_text(f"👥 Share karein aur earn karein:\n{ref_link}")
+        ref_link = f"https://t.me/{bot_username}?start={user_id}"
+        await update.message.reply_text(f"👥 Apna referral link share karein:\n{ref_link}")
 
     elif text == "⚙️ Extra":
         await update.message.reply_text("⚙️ Extra options coming soon!")
@@ -200,5 +197,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
