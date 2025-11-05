@@ -78,34 +78,37 @@ def ad_page(ad_id):
     return "Invalid Ad ID", 404
 
 @app.route("/watched", methods=["POST"])
-def ad_watched():
-    """Called when ad finishes watching"""
+def watched_ad():
     data = request.get_json()
     user_id = str(data.get("user_id"))
-    if not user_id:
-        return {"error": "Missing user_id"}, 400
 
-    users = load_users()
+    # Load current users
+    with open("users.json", "r") as f:
+        users = json.load(f)
+
     if user_id not in users:
-        users[user_id] = {"balance": 0, "joined_groups": False}
+        users[user_id] = {"balance": 0.0, "bonus_claimed": False}
 
-    earnings = round(random.uniform(3, 5), 2)
-    users[user_id]["balance"] += earnings
-    save_users(users)
-    
-    import random
-    earnings = round(random.uniform(3, 5), 2)  # random ₹3.00 - ₹5.00
+    reward = round(random.uniform(3.0, 5.0), 2)
     msg1 = f"✅ Aapne ₹{earnings} kamaye! Ad dekhne ka dhanyavaad 🎉"
     msg2 = "💬 Kripya dono groups join karein aur Bonus section me claim karein!"
+    users[user_id]["balance"] += reward
 
+    with open("users.json", "w") as f:
+        json.dump(users, f, indent=4)
+
+    # Send message to user
     try:
-        asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg1))
-        if not users[user_id].get("joined_groups", False):
-            asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg2))
-        return {"success": True}, 200
+        asyncio.run(
+            tg_app.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
+            )
+        )
     except Exception as e:
-        logging.error(f"Error sending messages: {e}")
-        return {"error": str(e)}, 500
+        print("Failed to send message:", e)
+
+    return "OK", 500
 
 # ------------------------
 # 🤖 Telegram Bot Logic
@@ -209,5 +212,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
