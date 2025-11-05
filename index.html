@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Watch Ad</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       margin: 0;
@@ -11,37 +12,69 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
+      overflow: hidden;
+      position: relative;
     }
     video {
       width: 100%;
-      height: auto;
-      max-height: 100vh;
+      height: 100%;
       object-fit: contain;
+    }
+    #tapOverlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      font-size: 22px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: none;
     }
   </style>
 </head>
 <body>
-  <video id="adVideo" autoplay playsinline controlslist="nodownload nofullscreen noremoteplayback" disablePictureInPicture>
+  <video id="adVideo" autoplay playsinline muted>
     <source src="{{ video_src }}" type="video/mp4">
   </video>
+  <div id="tapOverlay">▶️ Tap to Start Ad</div>
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     const video = document.getElementById("adVideo");
+    const tapOverlay = document.getElementById("tapOverlay");
 
+    // Try autoplay
+    document.addEventListener("DOMContentLoaded", () => {
+      video.play().catch(() => {
+        // If autoplay blocked, show overlay
+        tapOverlay.style.display = "block";
+      });
+    });
+
+    // When user taps overlay
+    tapOverlay.addEventListener("click", () => {
+      video.muted = false; // unmute on tap
+      video.play();
+      tapOverlay.style.display = "none";
+    });
+
+    // When video finishes completely
     video.addEventListener("ended", async () => {
       try {
-        await fetch("{{ domain }}/watched", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: "{{ user_id }}",
-            ad_id: "{{ ad_id }}"
-          })
-        });
-        Telegram.WebApp.close(); // ✅ Auto close MiniApp
-      } catch (err) {
-        console.error("Error reporting watch:", err);
-        Telegram.WebApp.close(); // Close even if request fails
+        const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        if (user) {
+          await fetch("/watched", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user.id })
+          });
+        }
+        window.Telegram?.WebApp?.close(); // auto-close mini app
+      } catch (e) {
+        console.error("Error closing ad:", e);
       }
     });
   </script>
