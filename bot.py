@@ -57,7 +57,7 @@ def ad_page(ad_id):
             html = f.read()
         return render_template_string(
             html,
-            video_src=f"{DOMAIN}/static/{ad['file']}",
+            video_src=ad["video_url"],
             redirect_link=ad["group_url"],
         )
     return "Invalid Ad ID", 404
@@ -149,4 +149,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
