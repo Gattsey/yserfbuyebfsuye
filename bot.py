@@ -110,13 +110,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+    user_id = update.message.from_user.id  # get user ID
 
     if text == "▶️ Ad Dekho":
         ad_idx = random.randrange(len(AD_LINKS))
-        ad_url = f"{DOMAIN}/ad/{ad_idx}"
+        # include user_id in URL so /watched route can track who watched
+        ad_url = f"{DOMAIN}/ad/{ad_idx}?user_id={user_id}"
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
         )
@@ -130,18 +131,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif text == "💵 Balance":
-        await update.message.reply_text("💰 Your current balance: ₹0.00 (demo).")
+        users = load_users()
+        balance = users.get(str(user_id), {}).get("balance", 0)
+        await update.message.reply_text(f"💰 Aapka current balance: ₹{balance:.2f}")
 
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
         ref_link = f"https://t.me/{bot_username}?start={update.message.from_user.id}"
-        await update.message.reply_text(f"👥 Share your referral link:\n{ref_link}")
+        await update.message.reply_text(f"👥 Apna referral link share kare:\n{ref_link}")
 
     elif text == "🎁 Bonus":
-        await update.message.reply_text("🎁 Your daily bonus feature will be added soon!")
+        await update.message.reply_text("🎁 Jaldi hi bonus feature launch hoga!")
 
     elif text == "⚙️ Extra":
-        await update.message.reply_text("⚙️ Settings and more options coming soon!")
+        await update.message.reply_text("⚙️ Settings aur extra options coming soon!")
 
 async def send_reward_messages(user_id, reward):
     """Send earning message and group join reminder"""
@@ -204,3 +207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
