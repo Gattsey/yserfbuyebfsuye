@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Local video ads (must be in /static directory)
 AD_LINKS = [
-    {"video_url": f"{DOMAIN}/static/ad1.mp4", "group_url": "https://t.me/looteverythingfast"},
-    {"video_url": f"{DOMAIN}/static/ad2.mp4", "group_url": "https://t.me/looteverythingfast2"},
+    {"file": "ad1.mp4", "group_url": "https://t.me/looteverythingfast"},
+    {"file": "ad2.mp4", "group_url": "https://t.me/looteverythingfast2"},
 ]
 
 # ------------------------
@@ -88,14 +88,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
         )
-        await update.message.reply_text("📊 Ek ad dekhne ki current rate: ₹ 3-5
+        await update.message.reply_text(
+            """📊 Ek ad dekhne ki current rate: ₹ 3–5
 
 ⚠️ Video khatam hone se pehle band mat karna, nahi toh reward nahi milega.
 
-👇 Neeche diye button ko dabao aur ad dekhna shuru karo", reply_markup=kb)
+👇 Neeche diye button ko dabao aur ad dekhna shuru karo!""",
+            reply_markup=kb
+        )
 
-    elif text == "💰 Balance":
-        await update.message.reply_text("💰 Your current balance: ₹0.00 .")
+    elif text == "💵 Balance":
+        await update.message.reply_text("💰 Your current balance: ₹0.00 (demo).")
 
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
@@ -140,6 +143,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
