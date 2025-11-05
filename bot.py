@@ -75,11 +75,35 @@ def ad_page(ad_id):
         with open("index.html", "r", encoding="utf-8") as f:
             html = f.read()
         return render_template_string(
-            html,
-            video_src=ad["video_url"],
-            redirect_link=GROUPS[0]["url"],
-        )
+    html,
+    video_src=ad["video_url"],
+    domain=DOMAIN,
+    ad_id=ad_id,
+    user_id=request.args.get("user_id", ""),  # user ID passed from Telegram
+)
     return "Invalid Ad ID", 404
+
+@app.route("/watched", methods=["POST"])
+def ad_watched():
+    """Called when user finishes watching ad"""
+    data = request.get_json()
+    user_id = data.get("user_id")
+    
+    if not user_id:
+        return {"error": "Missing user_id"}, 400
+
+    import random
+    earnings = round(random.uniform(3, 5), 2)  # random ₹3.00 - ₹5.00
+    msg1 = f"✅ Aapne ₹{earnings} kamaye! Ad dekhne ka dhanyavaad 🎉"
+    msg2 = "💬 Kripya dono groups join karein aur Bonus section me claim karein!"
+
+    try:
+        asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg1))
+        asyncio.run(tg_app.bot.send_message(chat_id=user_id, text=msg2))
+        return {"success": True}, 200
+    except Exception as e:
+        logger.error(f"Error sending messages: {e}")
+        return {"error": str(e)}, 500
 
 # ------------------------
 # 🤖 Telegram Bot Logic
@@ -103,7 +127,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "▶️ Ad Dekho":
         ad_idx = random.randrange(len(AD_LINKS))
-        ad_url = f"{DOMAIN}/ad/{ad_idx}"
+        user_id = update.message.from_user.id
+        ad_url = f"{DOMAIN}/ad/{ad_idx}?user_id={user_id}"
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
         )
@@ -180,3 +205,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
