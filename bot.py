@@ -67,14 +67,14 @@ def ad_page(ad_id):
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        ["👁 Ad Dekho", "💰 Balance"],
+        ["▶️ Ad Dekho", "💵 Balance"],
         ["👥 Refer & Earn", "🎁 Bonus"],
         ["⚙️ Extra"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     await update.message.reply_text(
-        "👋 Welcome! Choose an option below:",
+        "👀 Ads dekho, har ek dekhne pe paise kamayo!",
         reply_markup=reply_markup
     )
 
@@ -88,10 +88,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("▶️ Watch Ad", web_app=WebAppInfo(url=ad_url))]]
         )
-        await update.message.reply_text("📺 Please watch this ad completely:", reply_markup=kb)
+        await update.message.reply_text("📊 Ek ad dekhne ki current rate: ₹ 3-5
+
+⚠️ Video khatam hone se pehle band mat karna, nahi toh reward nahi milega.
+
+👇 Neeche diye button ko dabao aur ad dekhna shuru karo", reply_markup=kb)
 
     elif text == "💰 Balance":
-        await update.message.reply_text("💰 Your current balance: ₹0.00 (demo).")
+        await update.message.reply_text("💰 Your current balance: ₹0.00 .")
 
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
@@ -136,4 +140,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
