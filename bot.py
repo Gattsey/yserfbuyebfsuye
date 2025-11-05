@@ -3,6 +3,7 @@ import json
 import os
 import random
 import asyncio
+import nest_asyncio
 from flask import Flask, request, render_template_string, send_from_directory
 from telegram import (
     Update,
@@ -19,6 +20,8 @@ from telegram.ext import (
     filters,
 )
 import logging
+
+nest_asyncio.apply()
 
 # ------------------------
 # 🔧 Configuration
@@ -201,10 +204,13 @@ async def set_webhook():
 # 🚀 App Start
 # ------------------------
 def main():
-    loop = asyncio.get_event_loop()
+    # create new event loop and set it globally
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     loop.run_until_complete(set_webhook())
+
+    # run Flask app (this keeps running)
     app.run(host="0.0.0.0", port=10000)
 
 if __name__ == "__main__":
     main()
-
