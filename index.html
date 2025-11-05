@@ -7,6 +7,7 @@
     body {
       margin: 0;
       background-color: black;
+      overflow: hidden;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -15,26 +16,34 @@
     video {
       width: 100%;
       height: 100%;
-      object-fit: contain;
-      background: black;
+      object-fit: cover;
+      background-color: black;
     }
   </style>
 </head>
 <body>
-  <video id="adVideo" autoplay playsinline controls>
+  <video id="adVideo" autoplay playsinline controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture muted="false">
     <source src="{{ video_src }}" type="video/mp4">
   </video>
 
   <script>
     const video = document.getElementById("adVideo");
-    const userId = new URLSearchParams(window.location.search).get("user_id");
-    const adId = new URLSearchParams(window.location.search).get("ad_id");
 
+    // ✅ Disable context menu (no right-click save)
+    document.addEventListener("contextmenu", event => event.preventDefault());
+
+    // ✅ Auto close Telegram Mini App when video ends
     video.addEventListener("ended", () => {
-      fetch(`/watched/${userId}/${adId}`)
-        .then(() => window.close())
-        .catch(() => window.close());
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.close();
+      } else {
+        // Fallback if not inside Telegram
+        window.location.href = "{{ redirect_link }}";
+      }
     });
+
+    // ✅ Hide controls completely
+    video.controls = false;
   </script>
 </body>
 </html>
