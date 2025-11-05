@@ -137,11 +137,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=kb
         )
 
-        # Simulate ad watch — send reward automatically after few seconds
-        await asyncio.sleep(10)
-        reward = random.randint(3, 5)
-        await update.message.reply_text(f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad! 🎉")
-
         # Send group join message only if user hasn't joined yet
         if not users.get(user_id, {}).get("joined_groups"):
             group_text = "📢 Bonus Alert:\nKripya in dono groups ko join karein aur apna ₹50 bonus claim karein:\n\n"
@@ -205,4 +200,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
