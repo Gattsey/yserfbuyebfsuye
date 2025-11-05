@@ -139,6 +139,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📊 Ek ad dekhne ki current rate: ₹3–₹5\n\n👇 Neeche diye button par click karke ad dekho!",
             reply_markup=kb
         )
+        
+        # Send group join message only if user hasn't joined yet
+        if not users.get(user_id, {}).get("joined_groups"):
+            group_text = "📢 Bonus Alert:\nKripya in dono groups ko join karein aur apna ₹50 bonus claim karein:\n\n"
+            for g in GROUPS:
+                group_text += f"👉 [{g['name']}]({g['url']})\n"
+            group_text += "\n📍 Bonus section me claim karein!"
+            await update.message.reply_text(group_text, parse_mode="Markdown")
+            users[user_id] = {"joined_groups": False}
+            save_users(users)
 
     elif text == "💵 Balance":
         bal = users.get(user_id, {}).get("balance", 0)
@@ -197,3 +207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
