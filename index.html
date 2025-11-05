@@ -8,45 +8,32 @@
       margin: 0;
       background-color: black;
       display: flex;
-      flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
     }
     video {
       width: 100%;
-      height: auto;
-      max-height: 90vh;
+      height: 100%;
       object-fit: contain;
-    }
-    button {
-      margin-top: 10px;
-      background-color: #00aaff;
-      border: none;
-      color: white;
-      font-size: 18px;
-      border-radius: 8px;
-      padding: 10px 30px;
+      background: black;
     }
   </style>
 </head>
 <body>
-  <video id="adVideo" autoplay playsinline muted="false">
+  <video id="adVideo" autoplay playsinline controls>
     <source src="{{ video_src }}" type="video/mp4">
   </video>
-  <button id="continueBtn">Continue</button>
 
   <script>
     const video = document.getElementById("adVideo");
-    const btn = document.getElementById("continueBtn");
-    btn.style.display = "none";
+    const userId = new URLSearchParams(window.location.search).get("user_id");
+    const adId = new URLSearchParams(window.location.search).get("ad_id");
 
     video.addEventListener("ended", () => {
-      btn.style.display = "block";
-    });
-
-    btn.addEventListener("click", () => {
-      window.open("{{ redirect_link }}", "_blank");
+      fetch(`/watched/${userId}/${adId}`)
+        .then(() => window.close())
+        .catch(() => window.close());
     });
   </script>
 </body>
