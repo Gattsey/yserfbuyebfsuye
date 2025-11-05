@@ -33,11 +33,11 @@ logger = logging.getLogger(__name__)
 AD_LINKS = [
     {
         "video_url": "https://res.cloudinary.com/dxatgmpv7/video/upload/v1762335977/ad1.mp4_pepcsc.mp4",
-        "group_url": "https://t.me/yourgroup1"
+        "group_url": "https://t.me/looteverythingfast"
     },
     {
         "video_url": "https://res.cloudinary.com/dxatgmpv7/video/upload/v1762336514/ad2.mp4_dnuqew.mp4",
-        "group_url": "https://t.me/yourgroup2"
+        "group_url": "https://t.me/looteverythingfast2"
     },
 ]
 # ------------------------
@@ -154,6 +154,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
