@@ -31,10 +31,9 @@ logger = logging.getLogger(__name__)
 
 # Local video ads (must be in /static directory)
 AD_LINKS = [
-    {"file": "ad1.mp4", "group_url": "https://t.me/looteverythingfast"},
-    {"file": "ad2.mp4", "group_url": "https://t.me/looteverythingfast2"},
+    {"video_url": f"{DOMAIN}/static/ad1.mp4", "group_url": "https://t.me/looteverythingfast"},
+    {"video_url": f"{DOMAIN}/static/ad2.mp4", "group_url": "https://t.me/looteverythingfast2"},
 ]
-
 # ------------------------
 # 🌐 Flask App
 # ------------------------
@@ -149,5 +148,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
