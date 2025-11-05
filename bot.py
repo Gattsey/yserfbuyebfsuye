@@ -92,7 +92,9 @@ def ad_watched():
     earnings = round(random.uniform(3, 5), 2)
     users[user_id]["balance"] += earnings
     save_users(users)
-
+    
+    import random
+    earnings = round(random.uniform(3, 5), 2)  # random ₹3.00 - ₹5.00
     msg1 = f"✅ Aapne ₹{earnings} kamaye! Ad dekhne ka dhanyavaad 🎉"
     msg2 = "💬 Kripya dono groups join karein aur Bonus section me claim karein!"
 
@@ -207,4 +209,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
