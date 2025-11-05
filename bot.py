@@ -23,7 +23,7 @@ import logging
 # 🔧 Configuration
 # ------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DOMAIN = os.getenv("DOMAIN", "https://your-app-name.onrender.com")
+DOMAIN = os.getenv("DOMAIN", "https://yserfbuyebfsuye.onrender.com")
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -136,3 +136,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
