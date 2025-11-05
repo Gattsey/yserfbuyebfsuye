@@ -122,8 +122,14 @@ tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messag
 async def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, tg_app.bot)
+
+    # ✅ Ensure app initialized before processing
+    if not tg_app._initialized:
+        await tg_app.initialize()
+
     await tg_app.process_update(update)
     return "OK", 200
+
 
 async def set_webhook():
     url = f"{DOMAIN}/{BOT_TOKEN}"
@@ -143,3 +149,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
