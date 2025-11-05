@@ -74,7 +74,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     await update.message.reply_text(
-        "👀 Ads dekho, har ek dekhne pe paise kamayo!",
+        "👀 Ads dekho, har ek ad dekhne pe paise kamayo!",
         reply_markup=reply_markup
     )
 
@@ -82,11 +82,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
-    if text == "👁 Ad Dekho":
+    if text == "▶️ Ad Dekho":
         ad_idx = random.randrange(len(AD_LINKS))
         ad_url = f"{DOMAIN}/ad/{ad_idx}"
         kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("▶️ Watch Ad", web_app=WebAppInfo(url=ad_url))]]
+            [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
         )
         await update.message.reply_text("📊 Ek ad dekhne ki current rate: ₹ 3-5
 
@@ -140,5 +140,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
