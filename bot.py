@@ -1,4 +1,5 @@
 # bot.py — Telegram Mini App with Local MP4 Ads + Reply Keyboard
+import json
 import os
 import random
 import asyncio
@@ -29,6 +30,18 @@ DOMAIN = os.getenv("DOMAIN", "https://yserfbuyebfsuye.onrender.com")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+USERS_FILE = "users.json"
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_users(data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
 # Local video ads (must be in /static directory)
 AD_LINKS = [
     {
@@ -55,7 +68,7 @@ def serve_static(filename):
 
 @app.route("/ad/<int:ad_id>")
 def ad_page(ad_id):
-    """Render video ad page for Mini App"""
+    user_id = request.args.get("user_id", "unknown")
     if 0 <= ad_id < len(AD_LINKS):
         ad = AD_LINKS[ad_id]
         with open("index.html", "r", encoding="utf-8") as f:
@@ -66,6 +79,20 @@ def ad_page(ad_id):
             redirect_link=ad["group_url"],
         )
     return "Invalid Ad ID", 404
+
+@app.route("/watched/<int:user_id>/<int:ad_id>")
+def ad_watched(user_id, ad_id):
+    """Called automatically when ad is fully watched"""
+    users = load_users()
+    if str(user_id) not in users:
+        users[str(user_id)] = {"balance": 0, "joined_groups": False}
+
+    reward = round(random.uniform(3, 5), 2)
+    users[str(user_id)]["balance"] += reward
+    save_users(users)
+
+    asyncio.create_task(send_reward_messages(user_id, reward))
+    return "ok"
 
 # ------------------------
 # 🤖 Telegram Bot Logic
@@ -116,6 +143,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "⚙️ Extra":
         await update.message.reply_text("⚙️ Settings and more options coming soon!")
 
+async def send_reward_messages(user_id, reward):
+    """Send earning message and group join reminder"""
+    try:
+        await tg_app.bot.send_message(
+            chat_id=user_id,
+            text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad! 🎉"
+        )
+
+        users = load_users()
+        if not users[str(user_id)]["joined_groups"]:
+            await tg_app.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "📢 Bonus Reminder:\n\n"
+                    "Please join both groups and claim your bonus in the *Bonus* section!\n\n"
+                    "👉 [Group 1](https://t.me/looteverythingfast)\n"
+                    "👉 [Group 2](https://t.me/looteverythingfast2)"
+                ),
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        logger.warning(f"Message send failed for {user_id}: {e}")
+
 # ------------------------
 # 🔔 Webhook Integration
 # ------------------------
@@ -154,8 +204,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
