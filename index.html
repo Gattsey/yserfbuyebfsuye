@@ -62,7 +62,7 @@
       try {
         const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (user) {
-          await fetch("/watched", {
+          await fetch("{{ domain }}/watched", {   // ✅ FULL URL
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: user.id })
