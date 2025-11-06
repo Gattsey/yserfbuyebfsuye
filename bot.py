@@ -83,6 +83,7 @@ def ad_page(ad_id):
 @app.route("/watched", methods=["POST"])
 def watched():
     data = request.get_json()
+    print("🎥 WATCHED EVENT:", data)   # ✅ Add this line
     user_id = str(data.get("user_id"))
 
     if not user_id:
@@ -111,7 +112,8 @@ def watched():
         except Exception as e:
             logger.error(f"Error sending message: {e}")
 
-    asyncio.get_event_loop().create_task(notify_user())
+    import threading
+    threading.Thread(target=lambda: asyncio.run(notify_user())).start()
 
     return {"status": "ok", "reward": reward}, 200
 
@@ -210,3 +212,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
