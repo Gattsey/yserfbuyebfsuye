@@ -46,21 +46,18 @@
     const video = document.getElementById("adVideo");
     const tapOverlay = document.getElementById("tapOverlay");
 
-    // Try autoplay (some mobile browsers require user interaction)
     document.addEventListener("DOMContentLoaded", () => {
       video.play().catch(() => {
         tapOverlay.style.display = "block";
       });
     });
 
-    // When user taps overlay (for mobile autoplay restriction)
     tapOverlay.addEventListener("click", () => {
       video.muted = false;
       video.play();
       tapOverlay.style.display = "none";
     });
 
-    // ✅ When the ad ends — credit the user
     video.addEventListener("ended", async () => {
       try {
         const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -71,7 +68,7 @@
             body: JSON.stringify({ user_id: user.id })
           });
         }
-        window.Telegram?.WebApp?.close(); // ✅ Auto-close Mini App after reward
+        window.Telegram?.WebApp?.close();
       } catch (e) {
         console.error("Error closing ad:", e);
       }
