@@ -3,6 +3,8 @@ import os
 import random
 import asyncio
 import json
+import logging
+import nest_asyncio
 from flask import Flask, request, render_template_string
 from telegram import (
     Update,
@@ -18,10 +20,10 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-import logging
-import nest_asyncio
 
 nest_asyncio.apply()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ------------------------
 # 🔧 Configuration
@@ -63,7 +65,7 @@ def home():
 
 @app.route("/ad/<int:ad_id>")
 def ad_page(ad_id):
-    """Render video page for Mini App"""
+    """Render video ad MiniApp page"""
     if 0 <= ad_id < len(AD_LINKS):
         ad = AD_LINKS[ad_id]
         with open("index.html", "r", encoding="utf-8") as f:
@@ -77,6 +79,7 @@ def ad_page(ad_id):
         )
     return "Invalid Ad ID", 404
 
+
 @app.route("/watched", methods=["POST"])
 def watched():
     data = request.get_json()
@@ -86,17 +89,15 @@ def watched():
         return {"status": "error", "message": "No user_id provided"}, 400
 
     users = load_users()
-
-    # 🎯 Random reward between ₹3–₹5 (including decimals)
     reward = round(random.uniform(3, 5), 2)
 
     if user_id not in users:
-        users[user_id] = {"balance": 0.0, "bonus": 0.0}
+        users[user_id] = {"balance": 0.0, "joined_groups": False}
 
     users[user_id]["balance"] += reward
     save_users(users)
 
-    # 🧠 Define the async send function
+    # 🧠 Notify user inside Telegram
     async def notify_user():
         try:
             await tg_app.bot.send_message(
@@ -108,13 +109,9 @@ def watched():
                 text="📢 Please join both groups to claim your bonus in the Bonus section!"
             )
         except Exception as e:
-            logger.error(f"Error sending message to {user_id}: {e}")
+            logger.error(f"Error sending message: {e}")
 
-    # ✅ Run safely in the Telegram app’s async loop
-    try:
-        asyncio.run_coroutine_threadsafe(notify_user(), tg_app.loop)
-    except Exception as e:
-        logger.error(f"Error scheduling message: {e}")
+    asyncio.get_event_loop().create_task(notify_user())
 
     return {"status": "ok", "reward": reward}, 200
 
@@ -133,13 +130,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
     users = load_users()
 
     if user_id not in users:
-        users[user_id] = {"balance": 0, "joined_groups": False}
+        users[user_id] = {"balance": 0.0, "joined_groups": False}
         save_users(users)
 
     if text == "▶️ Ad Dekho":
@@ -152,27 +150,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📊 Ek ad dekhne ki current rate: ₹3–₹5\n\n👇 Neeche diye button par click karke ad dekho!",
             reply_markup=kb
         )
-        
-        # Send group join message only if user hasn't joined yet
-        if not users.get(user_id, {}).get("joined_groups"):
+
+        if not users[user_id]["joined_groups"]:
             group_text = "📢 Bonus Alert:\nKripya in dono groups ko join karein aur apna ₹50 bonus claim karein:\n\n"
             for g in GROUPS:
                 group_text += f"👉 [{g['name']}]({g['url']})\n"
-            group_text += "\n📍 Bonus section me claim karein!"
             await update.message.reply_text(group_text, parse_mode="Markdown")
-            users[user_id] = {"joined_groups": False}
-            save_users(users)
 
     elif text == "💵 Balance":
-        bal = users.get(user_id, {}).get("balance", 0)
-        btn = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("💰 Withdraw Funds", callback_data="withdraw")]]
-        )
-        await update.message.reply_text(f"💰 Available Balance: ₹{round(bal, 2)}", reply_markup=btn)
+        bal = round(users[user_id].get("balance", 0.0), 2)
+        await update.message.reply_text(f"💰 Available Balance: ₹{bal}")
 
     elif text == "🎁 Bonus":
-        joined = users[user_id].get("joined_groups", False)
-        if joined:
+        if users[user_id]["joined_groups"]:
             await update.message.reply_text("🎉 Aapka ₹50 bonus already claim ho chuka hai!")
         else:
             await update.message.reply_text("📢 Bonus claim karne ke liye dono groups join karein!")
@@ -196,11 +186,11 @@ tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messag
 async def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, tg_app.bot)
-
     if not tg_app._initialized:
         await tg_app.initialize()
     await tg_app.process_update(update)
     return "OK", 200
+
 
 async def set_webhook():
     url = f"{DOMAIN}/{BOT_TOKEN}"
@@ -220,8 +210,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
