@@ -78,37 +78,46 @@ def ad_page(ad_id):
     return "Invalid Ad ID", 404
 
 @app.route("/watched", methods=["POST"])
-def watched_ad():
+def watched():
     data = request.get_json()
     user_id = str(data.get("user_id"))
 
-    # Load current users
-    with open("users.json", "r") as f:
-        users = json.load(f)
+    if not user_id:
+        return {"status": "error", "message": "No user_id"}, 400
 
+    # Load or initialize user database
+    import json, random
+    try:
+        with open("users.json", "r") as f:
+            users = json.load(f)
+    except FileNotFoundError:
+        users = {}
+
+    # Calculate random reward
+    reward = round(random.uniform(3, 5), 2)
+
+    # Update user balance
     if user_id not in users:
-        users[user_id] = {"balance": 0.0, "bonus_claimed": False}
-
-    reward = round(random.uniform(3.0, 5.0), 2)
-    msg1 = f"✅ Aapne ₹{earnings} kamaye! Ad dekhne ka dhanyavaad 🎉"
-    msg2 = "💬 Kripya dono groups join karein aur Bonus section me claim karein!"
+        users[user_id] = {"balance": 0.0, "bonus": 0.0}
     users[user_id]["balance"] += reward
 
+    # Save back to file
     with open("users.json", "w") as f:
-        json.dump(users, f, indent=4)
+        json.dump(users, f, indent=2)
 
-    # Send message to user
-    try:
-        asyncio.run(
-            tg_app.bot.send_message(
-                chat_id=user_id,
-                text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
-            )
-        )
-    except Exception as e:
-        print("Failed to send message:", e)
+    # Send Telegram notification
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
+    asyncio.run(bot.send_message(
+        chat_id=user_id,
+        text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
+    ))
+    asyncio.run(bot.send_message(
+        chat_id=user_id,
+        text="📢 Please join both groups to claim your full bonus!"
+    ))
 
-    return "OK", 500
+    return {"status": "ok", "reward": reward}, 200
 
 # ------------------------
 # 🤖 Telegram Bot Logic
@@ -212,6 +221,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
