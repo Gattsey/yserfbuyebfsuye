@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <video id="adVideo" autoplay playsinline muted>
+  <video id="adVideo" autoplay playsinline>
     <source src="{{ video_src }}" type="video/mp4">
   </video>
   <div id="tapOverlay">▶️ Tap to Start Ad</div>
@@ -62,7 +62,7 @@
       try {
         const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (user) {
-          await fetch("{{ domain }}/watched", {   // ✅ FULL URL
+          await fetch("{{ domain }}/watched", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: user.id })
