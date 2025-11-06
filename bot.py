@@ -83,39 +83,38 @@ def watched():
     user_id = str(data.get("user_id"))
 
     if not user_id:
-        return {"status": "error", "message": "No user_id"}, 400
+        return {"status": "error", "message": "No user_id provided"}, 400
 
-    # Load or initialize user database
-    import json, random
-    try:
-        with open("users.json", "r") as f:
-            users = json.load(f)
-    except FileNotFoundError:
-        users = {}
+    users = load_users()
 
-    # Calculate random reward
+    # 🎯 Random reward between ₹3–₹5 (including decimals)
     reward = round(random.uniform(3, 5), 2)
 
-    # Update user balance
     if user_id not in users:
         users[user_id] = {"balance": 0.0, "bonus": 0.0}
+
     users[user_id]["balance"] += reward
+    save_users(users)
 
-    # Save back to file
-    with open("users.json", "w") as f:
-        json.dump(users, f, indent=2)
+    # 🧠 Define the async send function
+    async def notify_user():
+        try:
+            await tg_app.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
+            )
+            await tg_app.bot.send_message(
+                chat_id=user_id,
+                text="📢 Please join both groups to claim your bonus in the Bonus section!"
+            )
+        except Exception as e:
+            logger.error(f"Error sending message to {user_id}: {e}")
 
-    # Send Telegram notification
-    from telegram import Bot
-    bot = Bot(token=BOT_TOKEN)
-    asyncio.run(bot.send_message(
-        chat_id=user_id,
-        text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
-    ))
-    asyncio.run(bot.send_message(
-        chat_id=user_id,
-        text="📢 Please join both groups to claim your full bonus!"
-    ))
+    # ✅ Run safely in the Telegram app’s async loop
+    try:
+        asyncio.run_coroutine_threadsafe(notify_user(), tg_app.loop)
+    except Exception as e:
+        logger.error(f"Error scheduling message: {e}")
 
     return {"status": "ok", "reward": reward}, 200
 
@@ -221,6 +220,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
