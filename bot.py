@@ -189,11 +189,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚙️ Extra options coming soon!")
 
 # -------------------------------------------------
-# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — FINAL VERSION (No Deductions)
+# 🎁 BONUS BUTTON HANDLER (robust + immediate feedback)
 # -------------------------------------------------
 async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    # Immediately acknowledge the callback so the client unblocks
+    try:
+        await query.answer(text="Checking group membership...", show_alert=False)
+    except Exception as e:
+        logger.warning(f"query.answer failed: {e}")
+
     user_id = str(query.from_user.id)
     users = load_users()
     now = datetime.utcnow()
@@ -202,89 +207,105 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id not in users:
         users[user_id] = {"balance": 0.0, "joined_groups": False}
 
+    # store identifying info
     users[user_id]["first_name"] = query.from_user.first_name or ""
     users[user_id]["username"] = query.from_user.username or ""
-
     user = users[user_id]
     last_bonus = user.get("last_bonus")
 
-    # check group membership
+    # Try to change the button right away to show it's claimed (use edit_message_reply_markup)
+    try:
+        claimed_kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Claimed", callback_data="none")]])
+        # prefer query.edit_message_reply_markup to be robust
+        await query.edit_message_reply_markup(reply_markup=claimed_kb)
+    except Exception as e:
+        # Not fatal — log and continue. This prevents the handler from crashing.
+        logger.warning(f"Could not edit reply markup for {user_id}: {e}")
+
+    # Now check group membership with safe exceptions
     group1_status = False
     group2_status = False
 
     try:
-        member1 = await context.bot.get_chat_member(chat_id="@looteverythingfast", user_id=int(user_id))
-        group1_status = member1.status in ["member", "administrator", "creator"]
+        m1 = await context.bot.get_chat_member(chat_id="@looteverythingfast", user_id=int(user_id))
+        group1_status = m1.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Group1 check failed for {user_id}: {e}")
+        logger.warning(f"Could not check membership for group1 for {user_id}: {e}")
 
     try:
-        member2 = await context.bot.get_chat_member(chat_id="@looteverythingfast2", user_id=int(user_id))
-        group2_status = member2.status in ["member", "administrator", "creator"]
+        m2 = await context.bot.get_chat_member(chat_id="@looteverythingfast2", user_id=int(user_id))
+        group2_status = m2.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Group2 check failed for {user_id}: {e}")
+        logger.warning(f"Could not check membership for group2 for {user_id}: {e}")
 
     # CASE 1: Joined none
     if not group1_status and not group2_status:
-        await query.message.reply_text(
-            "🚫 You have not joined any of the required groups.\n\n"
-            "Join both groups and try again:\n\n"
-            "👉 https://t.me/looteverythingfast\n"
-            "👉 https://t.me/looteverythingfast2"
-        )
-        logger.info(f"BONUS_FAIL_NONE: user_id={user_id}")
+        try:
+            await query.message.reply_text(
+                "🚫 You have not joined any of the required groups.\n\n"
+                "Join both groups and try again:\n\n"
+                "👉 https://t.me/looteverythingfast\n"
+                "👉 https://t.me/looteverythingfast2"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send 'joined none' msg to {user_id}: {e}")
+        logger.info(f"BONUS_NONE: user_id={user_id}")
         return
 
-    # CASE 2: Joined only one group
-    elif group1_status != group2_status:
+    # CASE 2: Joined only one group -> give ₹25
+    if group1_status != group2_status:
         user["joined_groups"] = False
         user["joined_at"] = now.isoformat()
         user["last_bonus"] = now.isoformat()
         user["balance"] = user.get("balance", 0) + 25
         save_users(users)
-        await query.message.reply_text(
-            "⚠️ You have joined only one group.\n"
-            "Please join both groups to earn full rewards next time:\n\n"
-            "👉 https://t.me/looteverythingfast\n"
-            "👉 https://t.me/looteverythingfast2\n\n"
-            "✅ ₹25 bonus added!"
-        )
+        try:
+            await query.message.reply_text(
+                "⚠️ You have joined only one group.\n"
+                "Please join both groups to earn full rewards next time:\n\n"
+                "👉 https://t.me/looteverythingfast\n"
+                "👉 https://t.me/looteverythingfast2\n\n"
+                "✅ ₹25 bonus added!"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send 'one group' msg to {user_id}: {e}")
         logger.info(f"BONUS_ONE_GROUP: user_id={user_id}")
         return
 
-    # CASE 3: Joined both groups
-    else:
-        # 24-hour cooldown check
+    # CASE 3: Joined both groups -> handle 24h cooldown and add ₹50
+    if group1_status and group2_status:
         if last_bonus:
             try:
                 last_bonus_dt = datetime.fromisoformat(last_bonus)
             except Exception:
                 last_bonus_dt = now - timedelta(days=1)
-
             diff = now - last_bonus_dt
             if diff < timedelta(hours=24):
                 remaining = timedelta(hours=24) - diff
-                hours = int(remaining.total_seconds() // 3600)
-                minutes = int((remaining.total_seconds() % 3600) // 60)
-                seconds = int(remaining.total_seconds() % 60)
-                await query.message.reply_text(
-                    f"⏳ Please wait {hours}h {minutes}m {seconds}s for your next bonus."
-                )
+                h = int(remaining.total_seconds() // 3600)
+                m = int((remaining.total_seconds() % 3600) // 60)
+                s = int(remaining.total_seconds() % 60)
+                try:
+                    await query.message.reply_text(f"⏳ Please wait {h}h {m}m {s}s for your next bonus.")
+                except Exception as e:
+                    logger.error(f"Failed to send cooldown msg to {user_id}: {e}")
                 return
 
-        # Add full ₹50 bonus
+        # Give ₹50
         user["joined_groups"] = True
         user["joined_at"] = user.get("joined_at") or now.isoformat()
         user["last_bonus"] = now.isoformat()
         user["balance"] = user.get("balance", 0) + 50
         save_users(users)
-
-        await query.message.reply_text(
-            "🎉 Thanks for joining both groups!\n"
-            "Stay active there for big loots 💥\n\n"
-            "✅ ₹50 bonus added!\n\n"
-            "⏳ Please wait 24 hours for your next bonus."
-        )
+        try:
+            await query.message.reply_text(
+                "🎉 Thanks for joining both groups!\n"
+                "Stay active there for big loots 💥\n\n"
+                "✅ ₹50 bonus added!\n"
+                "⏳ Please wait 24 hours for your next bonus."
+            )
+        except Exception as e:
+            logger.error(f"Failed to send 'both groups' msg to {user_id}: {e}")
         logger.info(f"BONUS_BOTH_GROUPS: user_id={user_id}")
         return
 
@@ -432,4 +453,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
