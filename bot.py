@@ -189,7 +189,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚙️ Extra options coming soon!")
 
 # -------------------------------------------------
-# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — AUTO DETECTION
+# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — FINAL VERSION (No Deductions)
 # -------------------------------------------------
 async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -202,97 +202,90 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id not in users:
         users[user_id] = {"balance": 0.0, "joined_groups": False}
 
-    # store identifying info
     users[user_id]["first_name"] = query.from_user.first_name or ""
     users[user_id]["username"] = query.from_user.username or ""
 
     user = users[user_id]
     last_bonus = user.get("last_bonus")
 
-    # If user already joined both previously and wants daily bonus, check 24h
-    # But first check actual membership now
+    # check group membership
     group1_status = False
     group2_status = False
 
-    # try get_chat_member for both groups (bot must be member/admin of those groups)
     try:
-        m1 = await context.bot.get_chat_member(chat_id=GROUP1_HANDLE, user_id=int(user_id))
-        group1_status = m1.status in ["member", "administrator", "creator"]
+        member1 = await context.bot.get_chat_member(chat_id="@looteverythingfast", user_id=int(user_id))
+        group1_status = member1.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Could not check group1 membership for {user_id}: {e}")
+        logger.warning(f"Group1 check failed for {user_id}: {e}")
 
     try:
-        m2 = await context.bot.get_chat_member(chat_id=GROUP2_HANDLE, user_id=int(user_id))
-        group2_status = m2.status in ["member", "administrator", "creator"]
+        member2 = await context.bot.get_chat_member(chat_id="@looteverythingfast2", user_id=int(user_id))
+        group2_status = member2.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Could not check group2 membership for {user_id}: {e}")
+        logger.warning(f"Group2 check failed for {user_id}: {e}")
 
-    # CASE: joined both groups -> give bonus or daily bonus
-    if group1_status and group2_status:
-        # if user's last_bonus exists, check 24-hour window
+    # CASE 1: Joined none
+    if not group1_status and not group2_status:
+        await query.message.reply_text(
+            "🚫 You have not joined any of the required groups.\n\n"
+            "Join both groups and try again:\n\n"
+            "👉 https://t.me/looteverythingfast\n"
+            "👉 https://t.me/looteverythingfast2"
+        )
+        logger.info(f"BONUS_FAIL_NONE: user_id={user_id}")
+        return
+
+    # CASE 2: Joined only one group
+    elif group1_status != group2_status:
+        user["joined_groups"] = False
+        user["joined_at"] = now.isoformat()
+        user["last_bonus"] = now.isoformat()
+        user["balance"] = user.get("balance", 0) + 25
+        save_users(users)
+        await query.message.reply_text(
+            "⚠️ You have joined only one group.\n"
+            "Please join both groups to earn full rewards next time:\n\n"
+            "👉 https://t.me/looteverythingfast\n"
+            "👉 https://t.me/looteverythingfast2\n\n"
+            "✅ ₹25 bonus added!"
+        )
+        logger.info(f"BONUS_ONE_GROUP: user_id={user_id}")
+        return
+
+    # CASE 3: Joined both groups
+    else:
+        # 24-hour cooldown check
         if last_bonus:
             try:
                 last_bonus_dt = datetime.fromisoformat(last_bonus)
             except Exception:
                 last_bonus_dt = now - timedelta(days=1)
-            if now - last_bonus_dt >= timedelta(hours=24):
-                user["balance"] = user.get("balance", 0) + 50
-                user["last_bonus"] = now.isoformat()
-                user["joined_groups"] = True
-                user["joined_at"] = user.get("joined_at") or now.isoformat()
-                save_users(users)
-                await query.message.reply_text("🎁 ₹50 daily bonus added! See you again tomorrow 🎉")
-                logger.info(f"BONUS_DAILY: user {user_id} awarded daily bonus.")
-                return
-            else:
-                remaining = timedelta(hours=24) - (now - last_bonus_dt)
-                hours_left = int(remaining.total_seconds() // 3600)
-                await query.message.reply_text(f"⏳ Please wait {hours_left} more hours for your next bonus.")
-                return
-        else:
-            # first-time full join
-            user["balance"] = user.get("balance", 0) + 50
-            user["joined_groups"] = True
-            user["joined_at"] = now.isoformat()
-            user["last_bonus"] = now.isoformat()
-            save_users(users)
-            await query.message.reply_text("🎉 ₹50 bonus added! Thank you for joining both groups! You can claim again every 24 hours.")
-            logger.info(f"BONUS_CLAIM_OK: user_id={user_id} joined both groups.")
-            return
 
-    # CASE: joined only one group -> deduct ₹25
-    elif group1_status or group2_status:
-        # applied deduction for cheating/partial join
-        user["joined_groups"] = False
-        user["joined_at"] = now.isoformat()
-        user["last_bonus"] = now.isoformat()
-        user["balance"] = user.get("balance", 0) - 25
-        save_users(users)
-        await query.message.reply_text(
-            "⚠️ You have joined only one group.\n₹25 deducted from your bonus.\n"
-            "Please join *both* groups to earn full rewards next time:\n\n"
-            f"👉 {GROUPS[0]['url']}\n"
-            f"👉 {GROUPS[1]['url']}",
-            parse_mode="Markdown"
-        )
-        logger.info(f"BONUS_CLAIM_HALF: user_id={user_id} joined only one group.")
-        return
+            diff = now - last_bonus_dt
+            if diff < timedelta(hours=24):
+                remaining = timedelta(hours=24) - diff
+                hours = int(remaining.total_seconds() // 3600)
+                minutes = int((remaining.total_seconds() % 3600) // 60)
+                seconds = int(remaining.total_seconds() % 60)
+                await query.message.reply_text(
+                    f"⏳ Please wait {hours}h {minutes}m {seconds}s for your next bonus."
+                )
+                return
 
-    # CASE: joined none -> deduct ₹60
-    else:
-        user["joined_groups"] = False
-        user["joined_at"] = now.isoformat()
+        # Add full ₹50 bonus
+        user["joined_groups"] = True
+        user["joined_at"] = user.get("joined_at") or now.isoformat()
         user["last_bonus"] = now.isoformat()
-        user["balance"] = user.get("balance", 0) - 60
+        user["balance"] = user.get("balance", 0) + 50
         save_users(users)
+
         await query.message.reply_text(
-            "🚫 You have not joined any of the required groups.\n₹60 deducted (₹50 bonus + ₹10 penalty for cheating).\n"
-            "Join both groups and try again:\n\n"
-            f"👉 {GROUPS[0]['url']}\n"
-            f"👉 {GROUPS[1]['url']}",
-            parse_mode="Markdown"
+            "🎉 Thanks for joining both groups!\n"
+            "Stay active there for big loots 💥\n\n"
+            "✅ ₹50 bonus added!\n\n"
+            "⏳ Please wait 24 hours for your next bonus."
         )
-        logger.info(f"BONUS_CLAIM_FAIL: user_id={user_id} joined none.")
+        logger.info(f"BONUS_BOTH_GROUPS: user_id={user_id}")
         return
 
 # ------------------------
@@ -439,3 +432,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
