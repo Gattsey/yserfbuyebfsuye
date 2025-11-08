@@ -30,12 +30,16 @@ logger = logging.getLogger(__name__)
 # ------------------------
 # 🔧 Configuration
 # ------------------------
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DOMAIN = os.getenv("DOMAIN", "https://yserfbuyebfsuye.onrender.com")
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # must be set in environment
+DOMAIN = os.getenv("DOMAIN", "https://your-domain.onrender.com")  # update to your render domain
+
+# Groups to check (use the @username or t.me/username)
+GROUP1_HANDLE = "@looteverythingfast"
+GROUP2_HANDLE = "@looteverythingfast2"
 
 GROUPS = [
-    {"name": "Loot Everything Fast", "url": "https://t.me/looteverythingfast"},
-    {"name": "Loot Everything Fast 2", "url": "https://t.me/looteverythingfast2"}
+    {"name": "Loot Everything Fast", "url": f"https://t.me/{GROUP1_HANDLE.lstrip('@')}"},
+    {"name": "Loot Everything Fast 2", "url": f"https://t.me/{GROUP2_HANDLE.lstrip('@')}"}
 ]
 
 AD_LINKS = [
@@ -80,11 +84,10 @@ def ad_page(ad_id):
         )
     return "Invalid Ad ID", 404
 
-
 @app.route("/watched", methods=["POST"])
 def watched():
     data = request.get_json()
-    print("🎥 WATCHED EVENT:", data)
+    logger.info("🎥 WATCHED EVENT: %s", data)
     user_id = str(data.get("user_id"))
 
     if not user_id:
@@ -102,11 +105,11 @@ def watched():
     async def notify_user():
         try:
             await tg_app.bot.send_message(
-                chat_id=user_id,
+                chat_id=int(user_id),
                 text=f"✅ Aapne ₹{reward} kamaye! Ad dekhne ka dhanyavaad 🎉"
             )
             await tg_app.bot.send_message(
-                chat_id=user_id,
+                chat_id=int(user_id),
                 text="📢 Please join both groups to claim your bonus in the Bonus section!"
             )
         except Exception as e:
@@ -131,7 +134,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Welcome! Ads dekhe aur har ad dekhkar paise kamao!",
         reply_markup=reply_markup
     )
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -171,8 +173,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         await update.message.reply_text(
             "🎁 Join both groups below and press '✅ I Joined' to claim your ₹50 bonus:\n\n"
-            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
-            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)\n\n"
+            f"👉 {GROUPS[0]['url']}\n"
+            f"👉 {GROUPS[1]['url']}\n\n"
             "After joining, press the button below 👇",
             reply_markup=kb,
             parse_mode="Markdown"
@@ -187,7 +189,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚙️ Extra options coming soon!")
 
 # -------------------------------------------------
-# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — AUTO DETECTION VERSION
+# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — AUTO DETECTION
 # -------------------------------------------------
 async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -200,83 +202,105 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id not in users:
         users[user_id] = {"balance": 0.0, "joined_groups": False}
 
+    # store identifying info
     users[user_id]["first_name"] = query.from_user.first_name or ""
     users[user_id]["username"] = query.from_user.username or ""
 
     user = users[user_id]
+    last_bonus = user.get("last_bonus")
 
-    # check group membership
+    # If user already joined both previously and wants daily bonus, check 24h
+    # But first check actual membership now
     group1_status = False
     group2_status = False
 
+    # try get_chat_member for both groups (bot must be member/admin of those groups)
     try:
-        member1 = await context.bot.get_chat_member(chat_id="@looteverythingfast", user_id=int(user_id))
-        group1_status = member1.status in ["member", "administrator", "creator"]
+        m1 = await context.bot.get_chat_member(chat_id=GROUP1_HANDLE, user_id=int(user_id))
+        group1_status = m1.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Error checking group1: {e}")
+        logger.warning(f"Could not check group1 membership for {user_id}: {e}")
 
     try:
-        member2 = await context.bot.get_chat_member(chat_id="@looteverythingfast2", user_id=int(user_id))
-        group2_status = member2.status in ["member", "administrator", "creator"]
+        m2 = await context.bot.get_chat_member(chat_id=GROUP2_HANDLE, user_id=int(user_id))
+        group2_status = m2.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.warning(f"Error checking group2: {e}")
+        logger.warning(f"Could not check group2 membership for {user_id}: {e}")
 
-    # apply logic based on what they joined
+    # CASE: joined both groups -> give bonus or daily bonus
     if group1_status and group2_status:
-        # joined both groups
-        user["joined_groups"] = True
-        user["joined_at"] = now.isoformat()
-        user["last_bonus"] = now.isoformat()
-        user["balance"] += 50
-        save_users(users)
-        await query.message.reply_text("🎉 ₹50 bonus added! Thank you for joining both groups!\nYou can claim again every 24 hours.")
-        logger.info(f"BONUS_CLAIM_OK: user_id={user_id} joined both groups.")
-        return
+        # if user's last_bonus exists, check 24-hour window
+        if last_bonus:
+            try:
+                last_bonus_dt = datetime.fromisoformat(last_bonus)
+            except Exception:
+                last_bonus_dt = now - timedelta(days=1)
+            if now - last_bonus_dt >= timedelta(hours=24):
+                user["balance"] = user.get("balance", 0) + 50
+                user["last_bonus"] = now.isoformat()
+                user["joined_groups"] = True
+                user["joined_at"] = user.get("joined_at") or now.isoformat()
+                save_users(users)
+                await query.message.reply_text("🎁 ₹50 daily bonus added! See you again tomorrow 🎉")
+                logger.info(f"BONUS_DAILY: user {user_id} awarded daily bonus.")
+                return
+            else:
+                remaining = timedelta(hours=24) - (now - last_bonus_dt)
+                hours_left = int(remaining.total_seconds() // 3600)
+                await query.message.reply_text(f"⏳ Please wait {hours_left} more hours for your next bonus.")
+                return
+        else:
+            # first-time full join
+            user["balance"] = user.get("balance", 0) + 50
+            user["joined_groups"] = True
+            user["joined_at"] = now.isoformat()
+            user["last_bonus"] = now.isoformat()
+            save_users(users)
+            await query.message.reply_text("🎉 ₹50 bonus added! Thank you for joining both groups! You can claim again every 24 hours.")
+            logger.info(f"BONUS_CLAIM_OK: user_id={user_id} joined both groups.")
+            return
 
+    # CASE: joined only one group -> deduct ₹25
     elif group1_status or group2_status:
-        # joined only one group
+        # applied deduction for cheating/partial join
         user["joined_groups"] = False
         user["joined_at"] = now.isoformat()
         user["last_bonus"] = now.isoformat()
-        user["balance"] -= 25
+        user["balance"] = user.get("balance", 0) - 25
         save_users(users)
         await query.message.reply_text(
             "⚠️ You have joined only one group.\n₹25 deducted from your bonus.\n"
             "Please join *both* groups to earn full rewards next time:\n\n"
-            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
-            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)",
+            f"👉 {GROUPS[0]['url']}\n"
+            f"👉 {GROUPS[1]['url']}",
             parse_mode="Markdown"
         )
         logger.info(f"BONUS_CLAIM_HALF: user_id={user_id} joined only one group.")
         return
 
+    # CASE: joined none -> deduct ₹60
     else:
-        # joined none
         user["joined_groups"] = False
         user["joined_at"] = now.isoformat()
         user["last_bonus"] = now.isoformat()
-        user["balance"] -= 60
+        user["balance"] = user.get("balance", 0) - 60
         save_users(users)
         await query.message.reply_text(
             "🚫 You have not joined any of the required groups.\n₹60 deducted (₹50 bonus + ₹10 penalty for cheating).\n"
             "Join both groups and try again:\n\n"
-            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
-            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)",
+            f"👉 {GROUPS[0]['url']}\n"
+            f"👉 {GROUPS[1]['url']}",
             parse_mode="Markdown"
         )
         logger.info(f"BONUS_CLAIM_FAIL: user_id={user_id} joined none.")
         return
 
-# -------------------------------------------------
-# ⚠️ ADMIN COMMAND: PUNISH CHEATERS
-# -------------------------------------------------
 # ------------------------
 # Admin helper commands
 # ------------------------
-ADMIN_ID = 8288030589  # replace with your numeric Telegram ID
+ADMIN_ID = int(os.getenv("8288030589", "0"))  # Set your admin numeric ID in env or replace here
 
 async def list_claimers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List last N claimers (default 10)."""
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ Not authorized.")
         return
@@ -285,13 +309,12 @@ async def list_claimers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     n = int(args[0]) if args and args[0].isdigit() else 10
     users = load_users()
 
-    # Sort by joined_at if present, fallback to insertion order
     items = []
     for uid, info in users.items():
-        if info.get("joined_groups"):
+        if info.get("joined_groups") or info.get("joined_at"):
             joined = info.get("joined_at") or ""
             items.append((joined, uid, info))
-    items.sort(reverse=True)  # newest first
+    items.sort(reverse=True)
     items = items[:n]
 
     if not items:
@@ -307,7 +330,6 @@ async def list_claimers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 async def find_claimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Find user(s) by substring in username or first name."""
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ Not authorized.")
         return
@@ -336,7 +358,6 @@ async def find_claimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Punish a user by numeric id or by username (if unique)."""
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ Not authorized.")
         return
@@ -348,11 +369,10 @@ async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = context.args[0].lstrip("@")
     users = load_users()
 
-    # If numeric id provided
+    # numeric id
     if key.isdigit():
         target_id = key
     else:
-        # find by username (case-insensitive) - if multiple, ask to use id
         found = []
         for uid, info in users.items():
             if info.get("username") and info["username"].lower() == key.lower():
@@ -381,13 +401,12 @@ async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Deducted ₹60 from {target_id}. Current balance: ₹{users[target_id].get('balance',0)}")
 
 # ------------------------
-# 🔔 Webhook Integration
+# 🔔 Webhook Integration and App start
 # ------------------------
 tg_app = Application.builder().token(BOT_TOKEN).build()
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 tg_app.add_handler(CallbackQueryHandler(handle_bonus_claim, pattern="bonus_claim"))
-tg_app.add_handler(CommandHandler("punish", punish))
 tg_app.add_handler(CommandHandler("list_claimers", list_claimers))
 tg_app.add_handler(CommandHandler("find", find_claimer))
 tg_app.add_handler(CommandHandler("punish", punish))
@@ -415,11 +434,8 @@ async def set_webhook():
 def main():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(set_webhook())
-    app.run(host="0.0.0.0", port=10000)
+    # Start flask app (this will block)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
 
 if __name__ == "__main__":
     main()
-
-
-
-
