@@ -425,6 +425,321 @@ tg_app.add_handler(CommandHandler("list_claimers", list_claimers))
 tg_app.add_handler(CommandHandler("find", find_claimer))
 tg_app.add_handler(CommandHandler("punish", punish))
 
+# ------------------------
+# 🧠 Admin Power Panel (INLINE) — paste AFTER tg_app definition
+# ------------------------
+ADMIN_ID = 8288030589  # your admin numeric id
+
+ADMIN_LOG_FILE = "admin_actions.log"
+
+def log_admin_action(text: str):
+    """Append an admin action to admin_actions.log with timestamp."""
+    try:
+        with open(ADMIN_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.utcnow().isoformat()}  {text}\n")
+    except Exception as e:
+        logger.error(f"Failed to write admin log: {e}")
+
+# --- Admin Panel command (shows inline menu) ---
+async def power_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 Stats", callback_data="admin_stats"),
+            InlineKeyboardButton("💰 Users", callback_data="admin_users")
+        ],
+        [
+            InlineKeyboardButton("🔍 Find", callback_data="admin_find"),
+            InlineKeyboardButton("💬 Broadcast", callback_data="admin_broadcast")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Config", callback_data="admin_config"),
+            InlineKeyboardButton("📂 Export DB", callback_data="admin_export")
+        ],
+        [
+            InlineKeyboardButton("🧾 Logs", callback_data="admin_logs"),
+            InlineKeyboardButton("❌ Close", callback_data="admin_close")
+        ]
+    ])
+    await update.message.reply_text("🧠 Admin Control Panel", reply_markup=kb)
+    log_admin_action(f"ADMIN_OPEN: admin_id={update.effective_user.id}")
+
+# --- Handle admin inline button clicks ---
+async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        try:
+            await query.message.reply_text("❌ Not authorized.")
+        except:
+            pass
+        return
+
+    code = query.data
+
+    # Stats
+    if code == "admin_stats":
+        users = load_users()
+        total_users = len(users)
+        total_balance = sum([float(u.get("balance", 0) or 0) for u in users.values()])
+        total_joined = sum(1 for u in users.values() if u.get("joined_groups"))
+        msg = (
+            f"📊 Stats\n\n"
+            f"Total users: {total_users}\n"
+            f"Users joined both groups: {total_joined}\n"
+            f"Total balance (all users): ₹{round(total_balance,2)}\n"
+        )
+        await query.message.reply_text(msg)
+        log_admin_action(f"ADMIN_STATS viewed by {user_id}")
+        return
+
+    # Users (help text)
+    if code == "admin_users":
+        msg = (
+            "💰 User Tools (use these commands):\n\n"
+            "/find <id_or_username> — find user info\n"
+            "/add_balance <user_id> <amount> — add money\n"
+            "/deduct <user_id> <amount> — subtract money\n"
+            "/reset_bonus <user_id> — reset last bonus timer\n            "
+        )
+        await query.message.reply_text(msg)
+        log_admin_action(f"ADMIN_USERS menu opened by {user_id}")
+        return
+
+    # Find help
+    if code == "admin_find":
+        await query.message.reply_text("🔍 Usage: /find <user_id_or_username>\nExample: /find 123456789 or /find looteverything")
+        log_admin_action(f"ADMIN_FIND help shown to {user_id}")
+        return
+
+    # Broadcast help
+    if code == "admin_broadcast":
+        await query.message.reply_text("📢 Usage: /broadcast <message>\nThis will send the message to ALL users in users.json (be careful).")
+        log_admin_action(f"ADMIN_BROADCAST help shown to {user_id}")
+        return
+
+    # Config help
+    if code == "admin_config":
+        await query.message.reply_text(
+            "⚙️ Config commands:\n"
+            "/export_db — download users.json\n"
+            "/logs — see recent admin actions\n"
+            "/reset_bonus <user_id> — clears last_bonus so user can claim\n"
+        )
+        log_admin_action(f"ADMIN_CONFIG opened by {user_id}")
+        return
+
+    # Export DB
+    if code == "admin_export":
+        try:
+            await query.message.reply_document(document=open(USER_FILE, "rb"))
+            log_admin_action(f"ADMIN_EXPORTDB by {user_id}")
+        except Exception as e:
+            await query.message.reply_text(f"Failed to send DB: {e}")
+            logger.error(f"ADMIN_EXPORT error: {e}")
+        return
+
+    # Logs
+    if code == "admin_logs":
+        try:
+            if os.path.exists(ADMIN_LOG_FILE):
+                with open(ADMIN_LOG_FILE, "r", encoding="utf-8") as f:
+                    lines = f.read().strip().splitlines()[-50:]
+                    text = "🧾 Recent admin actions:\n\n" + "\n".join(lines[::-1])
+                    await query.message.reply_text(text or "No logs yet.")
+            else:
+                await query.message.reply_text("No admin logs found.")
+            log_admin_action(f"ADMIN_LOGS viewed by {user_id}")
+        except Exception as e:
+            await query.message.reply_text(f"Could not read logs: {e}")
+            logger.error(f"ADMIN_LOGS error: {e}")
+        return
+
+    # Close
+    if code == "admin_close":
+        try:
+            await query.message.edit_reply_markup(reply_markup=None)
+        except:
+            pass
+        await query.message.reply_text("Admin panel closed.")
+        log_admin_action(f"ADMIN_CLOSE by {user_id}")
+        return
+
+# --- Admin command implementations ---
+
+async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    users = load_users()
+    total_users = len(users)
+    total_balance = sum([float(u.get("balance", 0) or 0) for u in users.values()])
+    total_joined = sum(1 for u in users.values() if u.get("joined_groups"))
+    msg = (
+        f"📊 Stats\n\n"
+        f"Total users: {total_users}\n"
+        f"Users joined both groups: {total_joined}\n"
+        f"Total balance (all users): ₹{round(total_balance,2)}\n"
+    )
+    await update.message.reply_text(msg)
+    log_admin_action(f"CMD_stats by {update.effective_user.id}")
+
+async def find_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /find <user_id_or_username>")
+        return
+    key = " ".join(context.args).lstrip("@")
+    users = load_users()
+    # numeric ID
+    if key.isdigit() and key in users:
+        info = users[key]
+        await update.message.reply_text(f"{key} | @{info.get('username','-')} | {info.get('first_name','-')} | bal: ₹{info.get('balance',0)} | joined: {info.get('joined_at','-')}")
+        log_admin_action(f"CMD_find id {key} by {update.effective_user.id}")
+        return
+    # find by username or name substring
+    matches = []
+    for uid, info in users.items():
+        if key.lower() in (info.get("username") or "").lower() or key.lower() in (info.get("first_name") or "").lower():
+            matches.append((uid, info))
+    if not matches:
+        await update.message.reply_text("No matches found.")
+        return
+    lines = []
+    for uid, info in matches:
+        lines.append(f"{uid} | @{info.get('username','-')} | {info.get('first_name','-')} | bal: ₹{info.get('balance',0)} | joined: {info.get('joined_at','-')}")
+    await update.message.reply_text("\n".join(lines))
+    log_admin_action(f"CMD_find key='{key}' by {update.effective_user.id}")
+
+async def add_balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /add_balance <user_id> <amount>")
+        return
+    uid = context.args[0]
+    try:
+        amt = float(context.args[1])
+    except:
+        await update.message.reply_text("Amount must be a number.")
+        return
+    users = load_users()
+    if uid not in users:
+        users[uid] = {"balance": 0.0, "joined_groups": False}
+    users[uid]["balance"] = users[uid].get("balance", 0) + amt
+    save_users(users)
+    await update.message.reply_text(f"✅ Added ₹{amt} to {uid}. New balance: ₹{users[uid]['balance']}")
+    log_admin_action(f"CMD_add_balance {amt} to {uid} by {update.effective_user.id}")
+
+async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /deduct <user_id> <amount>")
+        return
+    uid = context.args[0]
+    try:
+        amt = float(context.args[1])
+    except:
+        await update.message.reply_text("Amount must be a number.")
+        return
+    users = load_users()
+    if uid not in users:
+        await update.message.reply_text("User not found.")
+        return
+    users[uid]["balance"] = users[uid].get("balance", 0) - amt
+    save_users(users)
+    try:
+        await context.bot.send_message(chat_id=int(uid), text=f"⚠️ Your account has been adjusted by ₹{amt}. Please contact admin if you think this is wrong.")
+    except Exception:
+        pass
+    await update.message.reply_text(f"✅ Deducted ₹{amt} from {uid}. New balance: ₹{users[uid]['balance']}")
+    log_admin_action(f"CMD_deduct {amt} from {uid} by {update.effective_user.id}")
+
+async def reset_bonus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if len(context.args) < 1:
+        await update.message.reply_text("Usage: /reset_bonus <user_id>")
+        return
+    uid = context.args[0]
+    users = load_users()
+    if uid not in users:
+        await update.message.reply_text("User not found.")
+        return
+    users[uid].pop("last_bonus", None)
+    save_users(users)
+    await update.message.reply_text(f"✅ Reset last_bonus for {uid}. They can claim again immediately.")
+    log_admin_action(f"CMD_reset_bonus for {uid} by {update.effective_user.id}")
+
+async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /broadcast <message>")
+        return
+    msg = " ".join(context.args)
+    users = load_users()
+    sent = 0
+    failed = 0
+    await update.message.reply_text("📢 Broadcast started. This may take a while.")
+    for uid in list(users.keys()):
+        try:
+            await context.bot.send_message(chat_id=int(uid), text=msg)
+            sent += 1
+            await asyncio.sleep(0.05)  # small delay to reduce flood risk
+        except Exception:
+            failed += 1
+    await update.message.reply_text(f"📤 Broadcast finished. Sent: {sent}, Failed: {failed}")
+    log_admin_action(f"CMD_broadcast by {update.effective_user.id} sent={sent} failed={failed}")
+
+async def export_db_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    try:
+        await update.message.reply_document(document=open(USER_FILE, "rb"))
+        log_admin_action(f"CMD_export_db by {update.effective_user.id}")
+    except Exception as e:
+        await update.message.reply_text(f"Failed to send DB: {e}")
+        logger.error(f"CMD_export_db error: {e}")
+
+async def logs_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+    if not os.path.exists(ADMIN_LOG_FILE):
+        await update.message.reply_text("No admin logs found.")
+        return
+    with open(ADMIN_LOG_FILE, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()[-50:]
+    await update.message.reply_text("🧾 Recent admin actions:\n\n" + "\n".join(lines[::-1]))
+
+# --- Register admin handlers (attach these to tg_app) ---
+tg_app.add_handler(CommandHandler("power", power_command))
+tg_app.add_handler(CallbackQueryHandler(handle_admin_callback, pattern="^admin_"))
+tg_app.add_handler(CommandHandler("stats", stats_cmd))
+tg_app.add_handler(CommandHandler("find", find_cmd))
+tg_app.add_handler(CommandHandler("add_balance", add_balance_cmd))
+tg_app.add_handler(CommandHandler("deduct", deduct_cmd))
+tg_app.add_handler(CommandHandler("reset_bonus", reset_bonus_cmd))
+tg_app.add_handler(CommandHandler("broadcast", broadcast_cmd))
+tg_app.add_handler(CommandHandler("export_db", export_db_cmd))
+tg_app.add_handler(CommandHandler("logs", logs_cmd))
+
+# Optional: also register /power alias to open panel
+tg_app.add_handler(CommandHandler("admin", power_command))
+
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 async def webhook():
     data = request.get_json(force=True)
@@ -453,6 +768,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
