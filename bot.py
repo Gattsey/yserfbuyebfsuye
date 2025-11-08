@@ -1,10 +1,11 @@
-# bot.py — Telegram Mini App with MP4 Ads + Auto Reward + Balance System
+# bot.py — Telegram Mini App with MP4 Ads + Auto Reward + Bonus + Admin Control
 import os
 import random
 import asyncio
 import json
 import logging
 import nest_asyncio
+from datetime import datetime, timedelta
 from flask import Flask, request, render_template_string
 from telegram import (
     Update,
@@ -17,11 +18,10 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
-from telegram.ext import CallbackQueryHandler
-from datetime import datetime, timedelta
 
 nest_asyncio.apply()
 logging.basicConfig(level=logging.INFO)
@@ -67,7 +67,6 @@ def home():
 
 @app.route("/ad/<int:ad_id>")
 def ad_page(ad_id):
-    """Render video ad MiniApp page"""
     if 0 <= ad_id < len(AD_LINKS):
         ad = AD_LINKS[ad_id]
         with open("index.html", "r", encoding="utf-8") as f:
@@ -85,7 +84,7 @@ def ad_page(ad_id):
 @app.route("/watched", methods=["POST"])
 def watched():
     data = request.get_json()
-    print("🎥 WATCHED EVENT:", data)   # ✅ Add this line
+    print("🎥 WATCHED EVENT:", data)
     user_id = str(data.get("user_id"))
 
     if not user_id:
@@ -100,7 +99,6 @@ def watched():
     users[user_id]["balance"] += reward
     save_users(users)
 
-    # 🧠 Notify user inside Telegram
     async def notify_user():
         try:
             await tg_app.bot.send_message(
@@ -134,6 +132,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -150,10 +149,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton("▶️ Ad Dekhe", web_app=WebAppInfo(url=ad_url))]]
         )
         await update.message.reply_text(
-    "📊 Ek ad dekhne ki current rate: ₹ 3-5 \n"
-    "⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega. \n"
-    "🪙 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare",
-    reply_markup=kb
+            "📊 Ek ad dekhne ki current rate: ₹3–₹5\n"
+            "⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega.\n"
+            "🪙 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare:",
+            reply_markup=kb
         )
 
         if not users[user_id]["joined_groups"]:
@@ -167,17 +166,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💰 Available Balance: ₹{bal}")
 
     elif text == "🎁 Bonus":
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ I Joined", callback_data="bonus_claim")]
-    ])
-    await update.message.reply_text(
-        "🎁 Join both groups below and press '✅ I Joined' to claim your ₹50 bonus:\n\n"
-        "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
-        "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)\n\n"
-        "After joining, press the button below 👇",
-        reply_markup=kb,
-        parse_mode="Markdown"
-    )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ I Joined", callback_data="bonus_claim")]
+        ])
+        await update.message.reply_text(
+            "🎁 Join both groups below and press '✅ I Joined' to claim your ₹50 bonus:\n\n"
+            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
+            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)\n\n"
+            "After joining, press the button below 👇",
+            reply_markup=kb,
+            parse_mode="Markdown"
+        )
 
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
@@ -187,6 +186,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "⚙️ Extra":
         await update.message.reply_text("⚙️ Extra options coming soon!")
 
+# -------------------------------------------------
+# 🎁 BONUS BUTTON HANDLER (✅ I Joined)
+# -------------------------------------------------
 async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -201,7 +203,7 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     joined_at = user.get("joined_at")
     last_bonus = user.get("last_bonus")
 
-    # If never claimed before
+    # First-time claim
     if not user["joined_groups"]:
         user["joined_groups"] = True
         user["joined_at"] = now.isoformat()
@@ -211,7 +213,7 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.message.reply_text("🎉 ₹50 bonus added! Come back every 24 hours for your next bonus.")
         return
 
-    # If already joined but time passed 24 hours
+    # Daily 24-hour bonus
     if last_bonus:
         last_bonus_dt = datetime.fromisoformat(last_bonus)
         if now - last_bonus_dt >= timedelta(hours=24):
@@ -228,12 +230,42 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await query.message.reply_text("✅ You already have your current bonus.")
 
+# -------------------------------------------------
+# ⚠️ ADMIN COMMAND: PUNISH CHEATERS
+# -------------------------------------------------
+ADMIN_ID = 123456789  # 👈 Replace with your Telegram user ID
+
+async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    if len(context.args) < 1:
+        await update.message.reply_text("Usage: /punish <user_id>")
+        return
+
+    target_id = context.args[0]
+    users = load_users()
+
+    if target_id in users:
+        users[target_id]["balance"] -= 60
+        save_users(users)
+        await context.bot.send_message(
+            chat_id=target_id,
+            text="⚠️ Don't be oversmart! You have not joined the groups.\n₹60 deducted (₹50 bonus + ₹10 penalty for cheating)."
+        )
+        await update.message.reply_text(f"✅ Deducted ₹60 from user {target_id}.")
+    else:
+        await update.message.reply_text("User not found in database.")
+
 # ------------------------
 # 🔔 Webhook Integration
 # ------------------------
 tg_app = Application.builder().token(BOT_TOKEN).build()
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+tg_app.add_handler(CallbackQueryHandler(handle_bonus_claim, pattern="bonus_claim"))
+tg_app.add_handler(CommandHandler("punish", punish))
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 async def webhook():
@@ -243,7 +275,6 @@ async def webhook():
         await tg_app.initialize()
     await tg_app.process_update(update)
     return "OK", 200
-
 
 async def set_webhook():
     url = f"{DOMAIN}/{BOT_TOKEN}"
@@ -263,7 +294,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
