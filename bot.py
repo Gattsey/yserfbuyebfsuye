@@ -187,7 +187,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚙️ Extra options coming soon!")
 
 # -------------------------------------------------
-# 🎁 BONUS BUTTON HANDLER (✅ I Joined)
+# 🎁 BONUS BUTTON HANDLER (✅ I Joined) — AUTO DETECTION VERSION
 # -------------------------------------------------
 async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -196,45 +196,76 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     users = load_users()
     now = datetime.utcnow()
 
-       # inside handle_bonus_claim, after `user_id = str(query.from_user.id)` and users = load_users()`
+    # ensure user record exists
     if user_id not in users:
         users[user_id] = {"balance": 0.0, "joined_groups": False}
 
-    # Save identifying info (useful for admin lookup)
     users[user_id]["first_name"] = query.from_user.first_name or ""
     users[user_id]["username"] = query.from_user.username or ""
 
     user = users[user_id]
-    joined_at = user.get("joined_at")
-    last_bonus = user.get("last_bonus")
 
-    # First-time claim
-    if not user["joined_groups"]:
+    # check group membership
+    group1_status = False
+    group2_status = False
+
+    try:
+        member1 = await context.bot.get_chat_member(chat_id="@looteverythingfast", user_id=int(user_id))
+        group1_status = member1.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logger.warning(f"Error checking group1: {e}")
+
+    try:
+        member2 = await context.bot.get_chat_member(chat_id="@looteverythingfast2", user_id=int(user_id))
+        group2_status = member2.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logger.warning(f"Error checking group2: {e}")
+
+    # apply logic based on what they joined
+    if group1_status and group2_status:
+        # joined both groups
         user["joined_groups"] = True
         user["joined_at"] = now.isoformat()
         user["last_bonus"] = now.isoformat()
         user["balance"] += 50
         save_users(users)
-        await query.message.reply_text("🎉 ₹50 bonus added! Come back every 24 hours for your next bonus.")
-        logger.info(f"BONUS_CLAIM: user_id={user_id} username={users[user_id].get('username')} first_name={users[user_id].get('first_name')} joined_at={users[user_id].get('joined_at')}")
+        await query.message.reply_text("🎉 ₹50 bonus added! Thank you for joining both groups!\nYou can claim again every 24 hours.")
+        logger.info(f"BONUS_CLAIM_OK: user_id={user_id} joined both groups.")
         return
 
-    # Daily 24-hour bonus
-    if last_bonus:
-        last_bonus_dt = datetime.fromisoformat(last_bonus)
-        if now - last_bonus_dt >= timedelta(hours=24):
-            user["balance"] += 50
-            user["last_bonus"] = now.isoformat()
-            save_users(users)
-            await query.message.reply_text("🎁 ₹50 daily bonus added! See you again tomorrow 🎉")
-            return
-        else:
-            remaining = timedelta(hours=24) - (now - last_bonus_dt)
-            hours_left = int(remaining.total_seconds() // 3600)
-            await query.message.reply_text(f"⏳ Please wait {hours_left} more hours for your next bonus.")
-            return
+    elif group1_status or group2_status:
+        # joined only one group
+        user["joined_groups"] = False
+        user["joined_at"] = now.isoformat()
+        user["last_bonus"] = now.isoformat()
+        user["balance"] -= 25
+        save_users(users)
+        await query.message.reply_text(
+            "⚠️ You have joined only one group.\n₹25 deducted from your bonus.\n"
+            "Please join *both* groups to earn full rewards next time:\n\n"
+            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
+            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)",
+            parse_mode="Markdown"
+        )
+        logger.info(f"BONUS_CLAIM_HALF: user_id={user_id} joined only one group.")
+        return
 
-    await query.message.reply_text("✅ You already have your current bonus.")
+    else:
+        # joined none
+        user["joined_groups"] = False
+        user["joined_at"] = now.isoformat()
+        user["last_bonus"] = now.isoformat()
+        user["balance"] -= 60
+        save_users(users)
+        await query.message.reply_text(
+            "🚫 You have not joined any of the required groups.\n₹60 deducted (₹50 bonus + ₹10 penalty for cheating).\n"
+            "Join both groups and try again:\n\n"
+            "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
+            "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)",
+            parse_mode="Markdown"
+        )
+        logger.info(f"BONUS_CLAIM_FAIL: user_id={user_id} joined none.")
+        return
 
 # -------------------------------------------------
 # ⚠️ ADMIN COMMAND: PUNISH CHEATERS
@@ -388,6 +419,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
