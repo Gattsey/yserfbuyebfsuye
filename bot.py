@@ -196,13 +196,13 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     users = load_users()
     now = datetime.utcnow()
 
-    # inside handle_bonus_claim, after `user_id = str(query.from_user.id)` and users = load_users()
-if user_id not in users:
-    users[user_id] = {"balance": 0.0, "joined_groups": False}
+       # inside handle_bonus_claim, after `user_id = str(query.from_user.id)` and users = load_users()`
+    if user_id not in users:
+        users[user_id] = {"balance": 0.0, "joined_groups": False}
 
-# Save identifying info (useful for admin lookup)
-users[user_id]["first_name"] = query.from_user.first_name or ""
-users[user_id]["username"] = query.from_user.username or ""
+    # Save identifying info (useful for admin lookup)
+    users[user_id]["first_name"] = query.from_user.first_name or ""
+    users[user_id]["username"] = query.from_user.username or ""
 
     user = users[user_id]
     joined_at = user.get("joined_at")
@@ -388,5 +388,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
