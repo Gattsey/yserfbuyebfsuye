@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # 🔧 Configuration
 # ------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # must be set in environment
-DOMAIN = os.getenv("DOMAIN", "https://your-domain.onrender.com")  # update to your render domain
+DOMAIN = os.getenv("DOMAIN", "https://yserfbuyebfsuye.onrender.com")  # update to your render domain
 
 # Groups to check (use the @username or t.me/username)
 GROUP1_HANDLE = "@looteverythingfast"
@@ -453,5 +453,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
