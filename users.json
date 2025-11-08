@@ -1,6 +1,8 @@
 {
   "123456789": {
-    "joined_groups": false,
-    "balance": 12.5
+    "balance": 62.5,
+    "joined_groups": true,
+    "joined_at": "2025-11-08T10:00:00",
+    "last_bonus": "2025-11-08T10:00:00"
   }
 }
