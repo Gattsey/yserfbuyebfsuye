@@ -196,8 +196,13 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
     users = load_users()
     now = datetime.utcnow()
 
-    if user_id not in users:
-        users[user_id] = {"balance": 0.0, "joined_groups": False}
+    # inside handle_bonus_claim, after `user_id = str(query.from_user.id)` and users = load_users()
+if user_id not in users:
+    users[user_id] = {"balance": 0.0, "joined_groups": False}
+
+# Save identifying info (useful for admin lookup)
+users[user_id]["first_name"] = query.from_user.first_name or ""
+users[user_id]["username"] = query.from_user.username or ""
 
     user = users[user_id]
     joined_at = user.get("joined_at")
@@ -211,6 +216,7 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user["balance"] += 50
         save_users(users)
         await query.message.reply_text("🎉 ₹50 bonus added! Come back every 24 hours for your next bonus.")
+        logger.info(f"BONUS_CLAIM: user_id={user_id} username={users[user_id].get('username')} first_name={users[user_id].get('first_name')} joined_at={users[user_id].get('joined_at')}")
         return
 
     # Daily 24-hour bonus
@@ -233,30 +239,115 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # -------------------------------------------------
 # ⚠️ ADMIN COMMAND: PUNISH CHEATERS
 # -------------------------------------------------
-ADMIN_ID = 8288030589  # 👈 Replace with your Telegram user ID
+# ------------------------
+# Admin helper commands
+# ------------------------
+ADMIN_ID = 8288030589  # replace with your numeric Telegram ID
 
-async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def list_claimers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List last N claimers (default 10)."""
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
+        await update.message.reply_text("❌ Not authorized.")
         return
 
-    if len(context.args) < 1:
-        await update.message.reply_text("Usage: /punish <user_id>")
-        return
-
-    target_id = context.args[0]
+    args = context.args or []
+    n = int(args[0]) if args and args[0].isdigit() else 10
     users = load_users()
 
-    if target_id in users:
-        users[target_id]["balance"] -= 60
-        save_users(users)
+    # Sort by joined_at if present, fallback to insertion order
+    items = []
+    for uid, info in users.items():
+        if info.get("joined_groups"):
+            joined = info.get("joined_at") or ""
+            items.append((joined, uid, info))
+    items.sort(reverse=True)  # newest first
+    items = items[:n]
+
+    if not items:
+        await update.message.reply_text("No claimers found.")
+        return
+
+    lines = []
+    for joined, uid, info in items:
+        uname = f"@{info.get('username')}" if info.get("username") else "-"
+        fname = info.get("first_name", "-")
+        bal = info.get("balance", 0)
+        lines.append(f"{uid}  | {uname} | {fname} | joined: {joined or '-'} | bal: ₹{bal}")
+    await update.message.reply_text("\n".join(lines))
+
+async def find_claimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Find user(s) by substring in username or first name."""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /find <substring>")
+        return
+
+    q = " ".join(context.args).lower()
+    users = load_users()
+    matches = []
+    for uid, info in users.items():
+        if q in (info.get("username") or "").lower() or q in (info.get("first_name") or "").lower():
+            matches.append((uid, info))
+    if not matches:
+        await update.message.reply_text("No matches found.")
+        return
+
+    lines = []
+    for uid, info in matches:
+        uname = f"@{info.get('username')}" if info.get("username") else "-"
+        fname = info.get("first_name", "-")
+        bal = info.get("balance", 0)
+        joined = info.get("joined_at", "-")
+        lines.append(f"{uid} | {uname} | {fname} | joined: {joined} | bal: ₹{bal}")
+    await update.message.reply_text("\n".join(lines))
+
+async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Punish a user by numeric id or by username (if unique)."""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Not authorized.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /punish <user_id_or_username>")
+        return
+
+    key = context.args[0].lstrip("@")
+    users = load_users()
+
+    # If numeric id provided
+    if key.isdigit():
+        target_id = key
+    else:
+        # find by username (case-insensitive) - if multiple, ask to use id
+        found = []
+        for uid, info in users.items():
+            if info.get("username") and info["username"].lower() == key.lower():
+                found.append(uid)
+        if len(found) == 0:
+            await update.message.reply_text("No user with that username found in DB.")
+            return
+        if len(found) > 1:
+            await update.message.reply_text("Multiple users found with that username. Use numeric id to punish.")
+            return
+        target_id = found[0]
+
+    if target_id not in users:
+        await update.message.reply_text("User not found in DB.")
+        return
+
+    users[target_id]["balance"] = users[target_id].get("balance", 0) - 60
+    save_users(users)
+    try:
         await context.bot.send_message(
-            chat_id=target_id,
+            chat_id=int(target_id),
             text="⚠️ Don't be oversmart! You have not joined the groups.\n₹60 deducted (₹50 bonus + ₹10 penalty for cheating)."
         )
-        await update.message.reply_text(f"✅ Deducted ₹60 from user {target_id}.")
-    else:
-        await update.message.reply_text("User not found in database.")
+    except Exception as e:
+        logger.error(f"Failed to message punished user: {e}")
+    await update.message.reply_text(f"✅ Deducted ₹60 from {target_id}. Current balance: ₹{users[target_id].get('balance',0)}")
 
 # ------------------------
 # 🔔 Webhook Integration
@@ -265,6 +356,9 @@ tg_app = Application.builder().token(BOT_TOKEN).build()
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 tg_app.add_handler(CallbackQueryHandler(handle_bonus_claim, pattern="bonus_claim"))
+tg_app.add_handler(CommandHandler("punish", punish))
+tg_app.add_handler(CommandHandler("list_claimers", list_claimers))
+tg_app.add_handler(CommandHandler("find", find_claimer))
 tg_app.add_handler(CommandHandler("punish", punish))
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -294,4 +388,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
