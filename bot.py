@@ -233,7 +233,7 @@ async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # -------------------------------------------------
 # ⚠️ ADMIN COMMAND: PUNISH CHEATERS
 # -------------------------------------------------
-ADMIN_ID = 123456789  # 👈 Replace with your Telegram user ID
+ADMIN_ID = 8288030589  # 👈 Replace with your Telegram user ID
 
 async def punish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -294,3 +294,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
