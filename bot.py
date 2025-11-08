@@ -20,6 +20,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram.ext import CallbackQueryHandler
+from datetime import datetime, timedelta
 
 nest_asyncio.apply()
 logging.basicConfig(level=logging.INFO)
@@ -132,7 +134,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -149,8 +150,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton("▶️ Ad Dekhe", web_app=WebAppInfo(url=ad_url))]]
         )
         await update.message.reply_text(
-    "📊 Ek ad dekhne ki current rate: ₹ 3-5\n"
-    "⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega.\n"
+    "📊 Ek ad dekhne ki current rate: ₹ 3-5 \n"
+    "⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega. \n"
     "🪙 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare",
     reply_markup=kb
         )
@@ -166,10 +167,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💰 Available Balance: ₹{bal}")
 
     elif text == "🎁 Bonus":
-        if users[user_id]["joined_groups"]:
-            await update.message.reply_text("🎉 Aapka ₹50 bonus already claim ho chuka hai!")
-        else:
-            await update.message.reply_text("📢 Bonus claim karne ke liye dono groups join karein!")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ I Joined", callback_data="bonus_claim")]
+    ])
+    await update.message.reply_text(
+        "🎁 Join both groups below and press '✅ I Joined' to claim your ₹50 bonus:\n\n"
+        "👉 [Loot Everything Fast](https://t.me/looteverythingfast)\n"
+        "👉 [Loot Everything Fast 2](https://t.me/looteverythingfast2)\n\n"
+        "After joining, press the button below 👇",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
 
     elif text == "👥 Refer & Earn":
         bot_username = (await context.bot.get_me()).username
@@ -178,6 +186,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "⚙️ Extra":
         await update.message.reply_text("⚙️ Extra options coming soon!")
+
+async def handle_bonus_claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = str(query.from_user.id)
+    users = load_users()
+    now = datetime.utcnow()
+
+    if user_id not in users:
+        users[user_id] = {"balance": 0.0, "joined_groups": False}
+
+    user = users[user_id]
+    joined_at = user.get("joined_at")
+    last_bonus = user.get("last_bonus")
+
+    # If never claimed before
+    if not user["joined_groups"]:
+        user["joined_groups"] = True
+        user["joined_at"] = now.isoformat()
+        user["last_bonus"] = now.isoformat()
+        user["balance"] += 50
+        save_users(users)
+        await query.message.reply_text("🎉 ₹50 bonus added! Come back every 24 hours for your next bonus.")
+        return
+
+    # If already joined but time passed 24 hours
+    if last_bonus:
+        last_bonus_dt = datetime.fromisoformat(last_bonus)
+        if now - last_bonus_dt >= timedelta(hours=24):
+            user["balance"] += 50
+            user["last_bonus"] = now.isoformat()
+            save_users(users)
+            await query.message.reply_text("🎁 ₹50 daily bonus added! See you again tomorrow 🎉")
+            return
+        else:
+            remaining = timedelta(hours=24) - (now - last_bonus_dt)
+            hours_left = int(remaining.total_seconds() // 3600)
+            await query.message.reply_text(f"⏳ Please wait {hours_left} more hours for your next bonus.")
+            return
+
+    await query.message.reply_text("✅ You already have your current bonus.")
 
 # ------------------------
 # 🔔 Webhook Integration
@@ -214,6 +263,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
