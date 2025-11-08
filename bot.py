@@ -122,13 +122,13 @@ def watched():
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        ["▶️ Ad Dekho", "💵 Balance"],
+        ["▶️ Ad Dekhe", "💵 Balance"],
         ["👥 Refer & Earn", "🎁 Bonus"],
         ["⚙️ Extra"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "👋 Welcome! Ads dekho aur har ad dekhkar paise kamao!",
+        "👋 Welcome! Ads dekhe aur har ad dekhkar paise kamao!",
         reply_markup=reply_markup
     )
 
@@ -142,14 +142,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users[user_id] = {"balance": 0.0, "joined_groups": False}
         save_users(users)
 
-    if text == "▶️ Ad Dekho":
+    if text == "▶️ Ad Dekhe":
         ad_idx = random.randrange(len(AD_LINKS))
         ad_url = f"{DOMAIN}/ad/{ad_idx}?user_id={user_id}"
         kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("▶️ Ad Dekho", web_app=WebAppInfo(url=ad_url))]]
+            [[InlineKeyboardButton("▶️ Ad Dekhe", web_app=WebAppInfo(url=ad_url))]]
         )
         await update.message.reply_text(
-            "📊 Ek ad dekhne ki current rate: ₹3–₹5\n\n👇 Neeche diye button par click karke ad dekho!",
+            "📊 Ek ad dekhne ki current rate: ₹ 3-5
+            ⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega.
+            👇 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare",
             reply_markup=kb
         )
 
@@ -212,4 +214,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
