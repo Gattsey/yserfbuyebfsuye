@@ -149,10 +149,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton("▶️ Ad Dekhe", web_app=WebAppInfo(url=ad_url))]]
         )
         await update.message.reply_text(
-            "📊 Ek ad dekhne ki current rate: ₹ 3-5
-            ⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega.
-            👇 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare",
-            reply_markup=kb
+    "📊 Ek ad dekhne ki current rate: ₹ 3-5\n"
+    "⚠️ Video khatam hone se pehle band nahi kariyega, nahi toh reward nahi milega.\n"
+    "🪙 Neeche diye gaye button ko dabaye aur ad dekhna shuru kare",
+    reply_markup=kb
         )
 
         if not users[user_id]["joined_groups"]:
@@ -214,5 +214,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
